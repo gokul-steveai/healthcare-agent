@@ -39,12 +39,24 @@ def render(client: APIClient) -> None:
     result, audit = st.session_state.get("scenario_result"), st.session_state.get("scenario_audit")
     if not isinstance(result, Mapping) or not isinstance(audit, Mapping):
         return
+
+    audit_id = audit.get("audit_id") or result.get("audit_id")
+    if audit_id and "human_review" not in audit:
+        try:
+            latest = client.audit(str(audit_id))
+            if latest.get("human_review"):
+                audit = latest
+                st.session_state["scenario_audit"] = latest
+        except Exception:
+            pass
+
     st.divider()
     columns = st.columns(3)
     columns[0].metric("Scenario ID", result.get("scenario_id", "—"))
     columns[1].metric("Boundary decision", result.get("boundary_decision", "—"))
-    columns[2].metric("Status", result.get("status", "—"))
+    hr = audit.get("human_review")
+    status_label = f"Reviewed ({hr.get('decision')})" if hr else result.get("status", "—")
+    columns[2].metric("Status", status_label)
     st.code(str(result.get("audit_id", "")), language=None)
-    render_decision_card(str(result.get("boundary_decision", "UNKNOWN")), str(audit.get("boundary_reasoning", "")))
-    render_audit_viewer(audit)
+    render_audit_viewer(audit, api_client=client)
     json_download("Download Audit JSON", audit, f"{audit.get('audit_id', 'audit')}.json", key="scenario_audit_download")

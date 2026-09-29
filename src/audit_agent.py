@@ -74,6 +74,8 @@ def generate_audit_record(
     *,
     audit_id: str | None = None,
     timestamp: str | None = None,
+    recon_ghostlog: list[dict[str, Any]] | None = None,
+    recon_receipt: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Create a validated, JSON-serializable audit record.
 
@@ -84,6 +86,8 @@ def generate_audit_record(
         boundary_output: Structured Boundary Evaluation Agent result.
         audit_id: Optional caller-supplied identifier, primarily for replay.
         timestamp: Optional ISO-8601 timestamp, primarily for deterministic tests.
+        recon_ghostlog: Optional Recon.AI GhostLog timeline events for governance traceability.
+        recon_receipt: Optional Recon.AI Trust Receipt attestation metadata.
 
     Returns:
         A versioned audit dictionary ready for JSON storage.
@@ -125,6 +129,10 @@ def generate_audit_record(
         "boundary_output": boundary,
         "version": AUDIT_VERSION,
     }
+    if recon_ghostlog:
+        record["recon_ghostlog"] = [dict(entry) for entry in recon_ghostlog]
+    if recon_receipt:
+        record["recon_receipt"] = dict(recon_receipt)
     _validate_audit_record(record)
     _ensure_json_serializable(record)
 
@@ -134,6 +142,64 @@ def generate_audit_record(
         scenario,
         record["decision"],
     )
+    return record
+
+
+VALID_REVIEW_DECISIONS = {"APPROVED", "REJECTED", "REQUEST_INFO"}
+
+
+def apply_human_review(
+    audit_id: str,
+    reviewer_name: str,
+    reviewer_role: str,
+    review_decision: str,
+    review_notes: str = "",
+    audit_directory: str | Path = DEFAULT_AUDIT_DIRECTORY,
+) -> dict[str, Any]:
+    """Record a clinical human-in-the-loop review decision and sign-off.
+
+    Appends the review milestone onto the Recon GhostLog timeline and updates the audit.
+    """
+
+    record = load_audit_record(audit_id, audit_directory)
+    clean_name = _non_empty_string(reviewer_name, "reviewer_name")
+    clean_role = _non_empty_string(reviewer_role, "reviewer_role")
+    decision_upper = review_decision.strip().upper()
+    if decision_upper not in VALID_REVIEW_DECISIONS:
+        raise AuditValidationError(
+            f"review_decision must be one of {', '.join(sorted(VALID_REVIEW_DECISIONS))}"
+        )
+
+    timestamp = _utc_timestamp()
+    review_data = {
+        "reviewer_name": clean_name,
+        "reviewer_role": clean_role,
+        "decision": decision_upper,
+        "notes": review_notes.strip() if review_notes else "",
+        "timestamp": timestamp,
+    }
+    record["human_review"] = review_data
+
+    # Append human review milestone to Recon GhostLog timeline
+    ghostlog = list(record.get("recon_ghostlog", []))
+    ghostlog.append({
+        "step": len(ghostlog) + 1,
+        "kind": "human_review_signoff",
+        "data": {
+            "decision": decision_upper,
+            "preview": f"Signed-off by {clean_name} ({clean_role}): {decision_upper}",
+            "notes": review_notes.strip() if review_notes else "",
+        },
+    })
+    record["recon_ghostlog"] = ghostlog
+
+    # Append human review milestone to reasoning trace
+    traces = list(record.get("reasoning_trace", []))
+    traces.append(f"Human Review {decision_upper} by {clean_name} ({clean_role})")
+    record["reasoning_trace"] = traces
+
+    save_audit_record(record, audit_directory, overwrite=True)
+    LOGGER.info("Human review %s applied to audit %s by %s", decision_upper, audit_id, clean_name)
     return record
 
 

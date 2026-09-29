@@ -26,6 +26,7 @@ try:  # Support package imports used by ASGI servers.
     from .clinical_agent import analyze_patient
     from .config import load_project_environment
     from .context_builder import build_patient_context
+    from .recon_guard import generate_recon_receipt, guarded_analyze_patient
 except ImportError:  # pragma: no cover - legacy direct-script execution.
     from audit_agent import (
         DEFAULT_AUDIT_DIRECTORY,
@@ -36,6 +37,7 @@ except ImportError:  # pragma: no cover - legacy direct-script execution.
     from clinical_agent import analyze_patient
     from config import load_project_environment
     from context_builder import build_patient_context
+    from recon_guard import generate_recon_receipt, guarded_analyze_patient
 
 
 LOGGER = logging.getLogger(__name__)
@@ -129,12 +131,13 @@ def run_pipeline(
     patient_context = build_patient_context(validated["patient_id"], data_dir)
     LOGGER.info("Patient context loaded for scenario %s", validated["scenario_id"])
 
-    clinical_output = analyze_patient(
+    guarded_result = guarded_analyze_patient(
         patient_context,
         validated["user_request"],
         client=clinical_client,
         api_key=clinical_api_key,
     )
+    clinical_output = guarded_result.clinical_output
     LOGGER.info("Clinical analysis completed for scenario %s", validated["scenario_id"])
 
     # Only the Clinical Agent packet is supplied. The scenario ID and expected
@@ -148,11 +151,17 @@ def run_pipeline(
         "Boundary evaluation completed for scenario %s", validated["scenario_id"]
     )
 
+    recon_receipt = generate_recon_receipt(
+        scenario_id=validated["scenario_id"],
+        boundary_decision=boundary_output["boundary_decision"],
+    )
     audit_record = generate_audit_record(
         scenario_id=validated["scenario_id"],
         patient_id=validated["patient_id"],
         clinical_output=clinical_output,
         boundary_output=boundary_output,
+        recon_ghostlog=guarded_result.ghostlog_timeline,
+        recon_receipt=recon_receipt,
     )
     save_audit_record(audit_record, audit_directory)
 

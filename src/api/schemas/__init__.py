@@ -11,6 +11,7 @@ from .models import (
     RunScenarioResponse,
     ScenarioSummary,
     ScenariosResponse,
+    ReviewAuditRequest,
 )
 
 __all__ = [
@@ -20,6 +21,7 @@ __all__ = [
     "AuditsResponse",
     "ErrorResponse",
     "HealthResponse",
+    "ReviewAuditRequest",
     "RunScenarioRequest",
     "RunScenarioResponse",
     "ScenarioSummary",

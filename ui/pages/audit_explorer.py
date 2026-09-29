@@ -39,5 +39,5 @@ def render(client: APIClient) -> None:
     if isinstance(audit, Mapping):
         st.divider()
         st.markdown("### Audit Details")
-        render_audit_viewer(audit)
+        render_audit_viewer(audit, api_client=client)
         json_download("Download Audit JSON", audit, f"{audit.get('audit_id', 'audit')}.json", key="explorer_audit_download")

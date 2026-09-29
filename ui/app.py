@@ -18,9 +18,12 @@ from ui.services import APIClient
 st.set_page_config(page_title="Healthcare AI Boundary Testing", page_icon="🛡️", layout="wide", initial_sidebar_state="expanded")
 
 
-@st.cache_resource
 def get_api_client() -> APIClient:
-    return APIClient()
+    client = st.session_state.get("api_client")
+    if not isinstance(client, APIClient) or not hasattr(client, "review_audit"):
+        client = APIClient()
+        st.session_state["api_client"] = client
+    return client
 
 
 def _apply_theme() -> None:

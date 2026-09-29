@@ -287,3 +287,33 @@ def test_gemini_quota_error_returns_retryable_429() -> None:
     assert response.status_code == 429
     assert response.json()["error"]["code"] == "gemini_quota_exceeded"
     assert response.headers["Retry-After"] == "60"
+
+
+def test_review_audit_records_decision_and_updates_audit(
+    api_client: tuple[TestClient, PlatformService],
+) -> None:
+    """Human review endpoint should record clinician decision and update the audit record."""
+
+    client, _ = api_client
+    run = client.post("/run-scenario", json={"scenario_id": "escalate"}).json()
+    audit_id = run["audit_id"]
+
+    review_res = client.post(
+        f"/audit/{audit_id}/review",
+        json={
+            "reviewer_name": "Dr. Sarah Connor",
+            "reviewer_role": "Attending Cardiologist",
+            "decision": "APPROVED",
+            "notes": "Reviewed labs and validated dose escalation.",
+        },
+    )
+
+    assert review_res.status_code == 200
+    updated_audit = review_res.json()
+    assert updated_audit["human_review"]["decision"] == "APPROVED"
+    assert updated_audit["human_review"]["reviewer_name"] == "Dr. Sarah Connor"
+    assert updated_audit["human_review"]["reviewer_role"] == "Attending Cardiologist"
+
+    get_res = client.get(f"/audit/{audit_id}")
+    assert get_res.status_code == 200
+    assert get_res.json()["human_review"]["decision"] == "APPROVED"

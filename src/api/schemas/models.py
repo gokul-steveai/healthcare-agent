@@ -83,6 +83,15 @@ class AuditsResponse(StrictModel):
     audits: list[AuditSummary]
 
 
+class ReviewAuditRequest(StrictModel):
+    """Payload for human-in-the-loop review sign-off."""
+
+    reviewer_name: str = Field(min_length=1, max_length=150)
+    reviewer_role: str = Field(min_length=1, max_length=150)
+    decision: Literal["APPROVED", "REJECTED", "REQUEST_INFO"]
+    notes: str = Field(default="", max_length=5000)
+
+
 class ErrorDetail(StrictModel):
     """Stable API error payload."""
 

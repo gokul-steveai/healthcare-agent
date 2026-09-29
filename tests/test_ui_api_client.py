@@ -47,3 +47,12 @@ def test_api_client_maps_connection_failure() -> None:
         raise httpx.ConnectError("refused", request=request)
     with pytest.raises(APIUnavailableError):
         _client(httpx.MockTransport(handler)).health()
+
+
+def test_api_client_review_audit() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/audit/audit_1/review" and request.method == "POST"
+        assert b"Dr. Connor" in request.read()
+        return httpx.Response(200, json={"audit_id": "audit_1", "human_review": {"decision": "APPROVED"}})
+    result = _client(httpx.MockTransport(handler)).review_audit("audit_1", "Dr. Connor", "Doctor", "APPROVED", "OK")
+    assert result["human_review"]["decision"] == "APPROVED"

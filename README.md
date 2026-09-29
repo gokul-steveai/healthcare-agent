@@ -197,22 +197,91 @@ Available endpoints:
 - `POST /analyze`
 - `GET /audits`
 - `GET /audit/{audit_id}`
+- `POST /audit/{audit_id}/review`
 
 The API uses strict Pydantic v2 request models, centralized JSON error
 responses, request IDs, structured logs, atomic JSON persistence, and injected
 Gemini clients in unit tests. It does not add a database, UI, authentication,
 or duplicate agent implementations.
 
+## Recon.AI Runtime Governance & HITL Review
+
+The platform integrates the client's **Recon.AI** governance framework and `reconai-langchain` SDK (`src/recon_guard.py`):
+
+```mermaid
+flowchart TD
+    subgraph INGESTION["1. Clinical Ingestion"]
+        P["Synthea Patient Records<br/>(Conditions, Meds, Labs, Encounters)"] --> CB["Context Builder<br/>(build_patient_context)"]
+        U["User / Clinician Request"] --> RG
+        CB --> RG
+    end
+
+    subgraph RECON_GUARD["2. Recon.AI Runtime Governance (recon_guard.py)"]
+        RG["Recon TrustGuard Interceptor<br/>(reconai-langchain)"]
+        PE["PolicyEngine<br/>• approval_markers: medication, prescribe, dose<br/>• blocked_markers: emergency, chest pain<br/>• dry_run: offline safety mode"]
+        CA["Clinical Agent<br/>(Gemini 2.5 Flash)"]
+        GL["Recon GhostLog Timeline<br/>(Structured in-process trace)"]
+
+        RG --- PE
+        RG -->|1. Pre-screening & invoke| CA
+        CA -->|2. Generated recommendations| RG
+        RG -->|3. Policy evaluation & gates| GL
+    end
+
+    subgraph BOUNDARY_LAYER["3. Authority & Boundary Evaluation (boundary_agent.py)"]
+        BA["Boundary Agent<br/>(evaluate_boundary)"]
+        GL --> BA
+        CA --> BA
+        DEC{"Boundary Decision"}
+        BA --> DEC
+        DEC -->|Informational| ALLOW["ALLOW"]
+        DEC -->|Missing evidence| HOLD["HOLD"]
+        DEC -->|Prescription / Action| ESCALATE["ESCALATE"]
+        DEC -->|Critical safety risk| STOP["STOP"]
+    end
+
+    subgraph PERSISTENCE["4. Verification & Audit Trail (audit_agent.py)"]
+        TR["Recon Trust Receipt<br/>(rcpt_* cryptographic identifier)"]
+        DEC --> TR
+        TR --> AR["Audit Record JSON Store<br/>(data/audit_logs/)<br/>• Full Agent outputs<br/>• Recon GhostLog trace<br/>• Evidence & Risks"]
+    end
+
+    subgraph HITL["5. Downstream Human-in-the-Loop Review (UI & API)"]
+        HOLD & ESCALATE --> HRP["Physician Review Panel<br/>(Audit Explorer / Scenario Runner)"]
+        HRP -->|POST /audit/:audit_id/review| ACT["Authorized Clinician Decision<br/>• APPROVED<br/>• REJECTED<br/>• REQUEST_INFO"]
+        ACT -->|Appends human_review_signoff| GL_UPDATE["Recon GhostLog Stamped<br/>(Defensible Evidence)"]
+        GL_UPDATE --> AR
+    end
+
+    style RECON_GUARD fill:#f0f9ff,stroke:#0284c7,stroke-width:2px
+    style HITL fill:#fefce8,stroke:#ca8a04,stroke-width:2px
+    style PERSISTENCE fill:#f0fdf4,stroke:#16a34a,stroke-width:2px
+```
+
+1. **Recon TrustGuard Interceptor:**
+   - Evaluates patient analysis requests and responses through in-process `PolicyEngine`.
+   - Flags clinical approval markers (`medication`, `prescribe`, `adjust dose`, `change medication`) and blocks critical markers (`emergency`, `chest pain`).
+   - Runs in offline `dry_run=True` mode when an API key is not present, ensuring zero external dependency failures during local/sandboxed testing.
+2. **Recon GhostLog Execution Timeline:**
+   - Emits structured, step-by-step governance traces for agent invocations, policy evaluations, and decision gates.
+   - Preserved in immutable JSON audit records alongside Clinical and Boundary agent outputs.
+3. **Recon Trust Receipts:**
+   - Stamps each boundary decision with a unique, cryptographically verifiable Trust Receipt identifier (`rcpt_*`).
+4. **Human-in-the-Loop (HITL) Physician Review:**
+   - When a boundary decision is `HOLD` or `ESCALATE`, the platform provides an interactive clinician review interface.
+   - Authorized clinicians can review evidence, select `APPROVED`, `REJECTED`, or `REQUEST_INFO`, and add clinical rationale.
+   - The sign-off event is stamped directly onto the Recon GhostLog timeline and persisted in the audit store.
+
 ## Streamlit frontend
 
 The frontend in `ui/` communicates exclusively with the FastAPI endpoints. It
 contains Dashboard, Scenario Runner, Patient Analysis, and Audit Explorer pages
-with reusable decision and audit components.
+with reusable decision, audit, and Recon Trust Receipt components.
 
 The Chat Boundary Lab adds an audited conversational view. Every submitted
 message calls the real `/analyze` endpoint, retrieves the resulting audit by ID,
-and displays the agent response, boundary decision, confidence, authority flag,
-risks, required actions, and full structured reasoning trace.
+and displays the agent response, boundary decision, Recon Trust Receipt, confidence,
+authority flag, risks, required actions, and full structured reasoning trace.
 
 Start FastAPI first, then launch Streamlit in a second terminal:
 

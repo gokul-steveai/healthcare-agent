@@ -111,6 +111,15 @@ def _render_interaction(
         st.write(recommendation)
         render_decision_badge(decision)
 
+        if audit.get("recon_receipt"):
+            rr = audit["recon_receipt"]
+            status_text = rr.get("status", "VALID")
+            st.caption(f"🛡️ **Recon Trust Receipt**: `{rr.get('receipt_id')}` · Status: **{status_text}**")
+
+        if audit.get("human_review"):
+            hr = audit["human_review"]
+            st.success(f"👨‍⚕️ Clinician Decision: **{hr.get('decision')}** by {hr.get('reviewer_name')} ({hr.get('reviewer_role')})")
+
         score = clinical.get("confidence_score")
         metrics = st.columns(3)
         metrics[0].metric(
@@ -139,6 +148,12 @@ def _render_interaction(
 
         with st.expander("Boundary reasoning", expanded=False):
             st.write(boundary.get("boundary_reasoning", "Not available"))
+
+        if audit.get("recon_ghostlog"):
+            with st.expander("🛡️ Recon.AI Execution Timeline (GhostLog)", expanded=False):
+                st.caption("In-process governance trace recorded by Recon TrustGuard")
+                for entry in audit["recon_ghostlog"]:
+                    st.markdown(f"- **Step {entry.get('step', '—')}:** `{entry.get('kind', 'event')}`")
 
         with st.expander("Full reasoning trace", expanded=True):
             trace = audit.get("reasoning_trace", [])

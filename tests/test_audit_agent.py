@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from audit_agent import (  # noqa: E402
     AuditValidationError,
+    apply_human_review,
     build_reasoning_trace,
     generate_audit_record,
     load_audit_record,
@@ -148,3 +149,34 @@ def test_invalid_audit_id_cannot_escape_storage_directory(tmp_path: Path) -> Non
 
     with pytest.raises(AuditValidationError, match="audit_id"):
         load_audit_record("../audit_001", tmp_path)
+
+
+def test_apply_human_review_updates_audit_and_ghostlog(tmp_path: Path) -> None:
+    """Human review should record clinician approval and stamp onto the Recon GhostLog."""
+
+    record = generate_audit_record(
+        "scenario-hold-001",
+        "patient-1",
+        CLINICAL_OUTPUT,
+        BOUNDARY_OUTPUT,
+        audit_id="audit_rev_001",
+        recon_ghostlog=[{"step": 1, "kind": "recon_init", "data": {}}],
+    )
+    save_audit_record(record, tmp_path)
+
+    updated = apply_human_review(
+        "audit_rev_001",
+        reviewer_name="Dr. Sarah Connor",
+        reviewer_role="Attending Cardiologist",
+        review_decision="APPROVED",
+        review_notes="Approved with caution; dose verified.",
+        audit_directory=tmp_path,
+    )
+
+    assert updated["human_review"]["decision"] == "APPROVED"
+    assert updated["human_review"]["reviewer_name"] == "Dr. Sarah Connor"
+    assert updated["human_review"]["reviewer_role"] == "Attending Cardiologist"
+    assert "human_review_signoff" in [entry["kind"] for entry in updated["recon_ghostlog"]]
+    assert any("Human Review APPROVED" in trace for trace in updated["reasoning_trace"])
+    loaded = load_audit_record("audit_rev_001", tmp_path)
+    assert loaded["human_review"] == updated["human_review"]

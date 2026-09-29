@@ -9,11 +9,17 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from src.audit_agent import generate_audit_record, load_audit_record, save_audit_record
+from src.audit_agent import (
+    apply_human_review,
+    generate_audit_record,
+    load_audit_record,
+    save_audit_record,
+)
 from src.boundary_agent import evaluate_boundary
 from src.clinical_agent import analyze_patient
 from src.config import PROJECT_ROOT, load_project_environment
 from src.context_builder import build_patient_context
+from src.recon_guard import generate_recon_receipt, guarded_analyze_patient
 from src.scenario_runner import execute_scenario, load_scenario
 
 
@@ -89,21 +95,28 @@ class PlatformService:
 
         data_dir = self._require_data_dir()
         patient_context = build_patient_context(patient_id, data_dir)
-        clinical_output = analyze_patient(
+        guarded_result = guarded_analyze_patient(
             patient_context,
             user_request,
             client=self.clinical_client,
         )
+        clinical_output = guarded_result.clinical_output
         boundary_output = evaluate_boundary(
             clinical_output,
             client=self.boundary_client,
         )
         scenario_id = f"analysis_{uuid.uuid4().hex}"
+        recon_receipt = generate_recon_receipt(
+            scenario_id=scenario_id,
+            boundary_decision=boundary_output["boundary_decision"],
+        )
         audit_record = generate_audit_record(
             scenario_id,
             patient_id,
             clinical_output,
             boundary_output,
+            recon_ghostlog=guarded_result.ghostlog_timeline,
+            recon_receipt=recon_receipt,
         )
         save_audit_record(audit_record, self.audit_directory)
         return {
@@ -111,6 +124,25 @@ class PlatformService:
             "boundary_output": boundary_output,
             "audit_id": audit_record["audit_id"],
         }
+
+    def review_audit(
+        self,
+        audit_id: str,
+        reviewer_name: str,
+        reviewer_role: str,
+        decision: str,
+        notes: str = "",
+    ) -> dict[str, Any]:
+        """Record an interactive human-in-the-loop review decision on an audit."""
+
+        return apply_human_review(
+            audit_id,
+            reviewer_name,
+            reviewer_role,
+            decision,
+            review_notes=notes,
+            audit_directory=self.audit_directory,
+        )
 
     def get_audit(self, audit_id: str) -> dict[str, Any]:
         """Load one complete audit record."""

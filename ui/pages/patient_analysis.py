@@ -2,7 +2,7 @@
 
 from collections.abc import Mapping
 import streamlit as st
-from ui.components import render_boundary_output, render_clinical_output
+from ui.components import render_audit_viewer, render_boundary_output, render_clinical_output
 from ui.pages.common import json_download, show_api_error
 from ui.services import APIClient
 
@@ -29,6 +29,16 @@ def render(client: APIClient) -> None:
     if not isinstance(result, Mapping):
         return
     st.divider()
+    audit_id = result.get("audit_id")
+    if audit_id:
+        try:
+            audit = client.audit(str(audit_id))
+            render_audit_viewer(audit, api_client=client)
+            json_download("Download Audit JSON", audit, f"{audit_id}.json", key="analysis_download")
+            return
+        except Exception:
+            pass
+
     clinical, boundary = result.get("clinical_output", {}), result.get("boundary_output", {})
     if isinstance(clinical, Mapping):
         render_clinical_output(clinical)

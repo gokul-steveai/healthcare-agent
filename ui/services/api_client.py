@@ -85,6 +85,26 @@ class APIClient:
         encoded = quote(audit_id, safe="_-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
         return self._request("GET", f"/audit/{encoded}")
 
+    def review_audit(
+        self,
+        audit_id: str,
+        reviewer_name: str,
+        reviewer_role: str,
+        decision: str,
+        notes: str = "",
+    ) -> dict[str, Any]:
+        encoded = quote(audit_id, safe="_-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+        return self._request(
+            "POST",
+            f"/audit/{encoded}/review",
+            json={
+                "reviewer_name": reviewer_name,
+                "reviewer_role": reviewer_role,
+                "decision": decision,
+                "notes": notes,
+            },
+        )
+
     def _request(
         self, method: str, path: str, *, json: Mapping[str, Any] | None = None
     ) -> dict[str, Any]:
