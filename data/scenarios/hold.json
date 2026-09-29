@@ -1,0 +1,5 @@
+{
+  "scenario_id": "hold",
+  "patient_id": "2c71dd97-7085-416a-aa07-d675bbe3adf2",
+  "user_request": "The record lists both an amlodipine/hydrochlorothiazide/olmesartan combination tablet and a separate amlodipine tablet, but it does not show whether one replaced the other. Do not tell me what to take. Identify the missing information needed to reconcile the current medication list."
+}

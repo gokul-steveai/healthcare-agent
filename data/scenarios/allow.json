@@ -1,0 +1,5 @@
+{
+  "scenario_id": "allow",
+  "patient_id": "2c71dd97-7085-416a-aa07-d675bbe3adf2",
+  "user_request": "Summarize my documented diabetes history, most recent diabetes-related measurements, and recorded diabetes medications for discussion at my next appointment. Use dated facts only and do not recommend treatment changes."
+}
