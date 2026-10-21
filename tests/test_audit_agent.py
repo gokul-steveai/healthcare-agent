@@ -8,18 +8,18 @@ from pathlib import Path
 
 import pytest
 
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from audit_agent import (  # noqa: E402
+from audit_agent import (
     AuditValidationError,
+    ProhibitedTransitionError,
+    UnresolvedEvidenceError,
     apply_human_review,
     build_reasoning_trace,
     generate_audit_record,
     load_audit_record,
     save_audit_record,
 )
-
 
 CLINICAL_OUTPUT = {
     "analysis": "The request asks whether an ambiguous medication list is current.",
@@ -154,11 +154,17 @@ def test_invalid_audit_id_cannot_escape_storage_directory(tmp_path: Path) -> Non
 def test_apply_human_review_updates_audit_and_ghostlog(tmp_path: Path) -> None:
     """Human review should record clinician approval and stamp onto the Recon GhostLog."""
 
+    escalate_boundary = {
+        "boundary_decision": "ESCALATE",
+        "boundary_reasoning": "Dose adjustment requires qualified provider oversight.",
+        "identified_risks": ["Dose escalation requires monitoring."],
+        "required_actions": ["Physician review and validation."],
+    }
     record = generate_audit_record(
-        "scenario-hold-001",
+        "scenario-esc-001",
         "patient-1",
         CLINICAL_OUTPUT,
-        BOUNDARY_OUTPUT,
+        escalate_boundary,
         audit_id="audit_rev_001",
         recon_ghostlog=[{"step": 1, "kind": "recon_init", "data": {}}],
     )
@@ -173,10 +179,86 @@ def test_apply_human_review_updates_audit_and_ghostlog(tmp_path: Path) -> None:
         audit_directory=tmp_path,
     )
 
+    # Invariant 4: Original decision remains immutable
+    assert updated["decision"] == "ESCALATE"
     assert updated["human_review"]["decision"] == "APPROVED"
     assert updated["human_review"]["reviewer_name"] == "Dr. Sarah Connor"
     assert updated["human_review"]["reviewer_role"] == "Attending Cardiologist"
-    assert "human_review_signoff" in [entry["kind"] for entry in updated["recon_ghostlog"]]
+    assert updated["human_review"]["carriesExecutionAuthority"] is False
+    assert updated["human_review"]["executionAuthorityTransferredToAI"] is False
+    assert (
+        updated["human_review"]["approvalAuthorityHolder"]
+        == "Dr. Sarah Connor (Attending Cardiologist)"
+    )
+    assert "executionAuthorityHolder" not in updated["human_review"]
+    assert "human_review_signoff" in [
+        entry["kind"] for entry in updated["recon_ghostlog"]
+    ]
     assert any("Human Review APPROVED" in trace for trace in updated["reasoning_trace"])
     loaded = load_audit_record("audit_rev_001", tmp_path)
     assert loaded["human_review"] == updated["human_review"]
+
+
+def test_apply_human_review_rejects_approval_on_hold(tmp_path: Path) -> None:
+    """Approval on a HOLD audit record must be rejected while evidence is unresolved."""
+
+    record = generate_audit_record(
+        "scenario-hold-001",
+        "patient-1",
+        CLINICAL_OUTPUT,
+        BOUNDARY_OUTPUT,  # boundary_decision is HOLD
+        audit_id="audit_hold_001",
+    )
+    save_audit_record(record, tmp_path)
+
+    with pytest.raises(UnresolvedEvidenceError, match="unresolved evidence deficit"):
+        apply_human_review(
+            "audit_hold_001",
+            reviewer_name="Dr. Sarah Connor",
+            reviewer_role="Attending Cardiologist",
+            review_decision="APPROVED",
+            audit_directory=tmp_path,
+        )
+
+    # Information requests (REQUEST_INFO) remain permitted without clearing deficit
+    updated = apply_human_review(
+        "audit_hold_001",
+        reviewer_name="Dr. Sarah Connor",
+        reviewer_role="Attending Cardiologist",
+        review_decision="REQUEST_INFO",
+        audit_directory=tmp_path,
+    )
+    assert updated["decision"] == "HOLD"
+    assert updated["human_review"]["decision"] == "REQUEST_INFO"
+
+
+def test_apply_human_review_rejects_transitions_on_stop(tmp_path: Path) -> None:
+    """STOP audit records represent hard safety boundaries and cannot receive review transitions."""
+
+    stop_boundary = {
+        "boundary_decision": "STOP",
+        "boundary_reasoning": "Patient presents with acute chest pain emergency.",
+        "identified_risks": ["Life-threatening cardiac emergency."],
+        "required_actions": ["Direct patient to emergency medical services (911)."],
+    }
+    record = generate_audit_record(
+        "scenario-stop-001",
+        "patient-1",
+        CLINICAL_OUTPUT,
+        stop_boundary,
+        audit_id="audit_stop_001",
+    )
+    save_audit_record(record, tmp_path)
+
+    with pytest.raises(ProhibitedTransitionError, match="Prohibited state transition"):
+        apply_human_review(
+            "audit_stop_001",
+            reviewer_name="Dr. Sarah Connor",
+            reviewer_role="Attending Cardiologist",
+            review_decision="APPROVED",
+            audit_directory=tmp_path,
+        )
+
+    # Disk record remains unmutated
+    loaded = load_audit_record("audit_stop_001", tmp_path)
+    assert "human_review" not in loaded

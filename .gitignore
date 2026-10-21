@@ -1,14 +1,33 @@
 # Local secrets
 .env
+.streamlit/secrets.toml
+
+# Scratch / ad-hoc testing runs
+scratch/
 
 # Generated pipeline data
 data/audit_logs/
 data/results/
 
-# Python artifacts
+# Python artifacts and caches
 __pycache__/
 *.py[cod]
 .pytest_cache/
 .pytest_runtime*/
+.ruff_cache/
+.mypy_cache/
 .venv/
 venv/
+*.egg-info/
+dist/
+build/
+
+# Coverage reports
+.coverage
+htmlcov/
+coverage.xml
+
+# IDE and OS
+.DS_Store
+Thumbs.db
+

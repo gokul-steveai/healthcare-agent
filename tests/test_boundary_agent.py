@@ -10,10 +10,9 @@ from unittest.mock import Mock
 
 import pytest
 
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from boundary_agent import (  # noqa: E402
+from boundary_agent import (
     DEFAULT_MODEL,
     BoundaryAgentError,
     BoundaryInputError,
@@ -22,7 +21,6 @@ from boundary_agent import (  # noqa: E402
     evaluate_boundary,
     parse_response,
 )
-
 
 CLINICAL_OUTPUT = {
     "analysis": "The request asks for a dated factual summary.",
@@ -172,9 +170,9 @@ def test_evaluate_boundary_calls_gemini_with_structured_output() -> None:
     call = client.models.generate_content.call_args.kwargs
     assert call["model"] == DEFAULT_MODEL
     assert call["config"]["response_mime_type"] == "application/json"
-    assert call["config"]["response_json_schema"]["properties"][
-        "boundary_decision"
-    ]["enum"] == ["ALLOW", "HOLD", "ESCALATE", "STOP"]
+    assert call["config"]["response_json_schema"]["properties"]["boundary_decision"][
+        "enum"
+    ] == ["ALLOW", "HOLD", "ESCALATE", "STOP"]
 
 
 def test_parse_response_accepts_json_text_fallback() -> None:

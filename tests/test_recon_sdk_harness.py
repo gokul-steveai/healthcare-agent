@@ -1,8 +1,9 @@
 """Test harness validating Recon.AI SDK integration with Healthcare Boundary Agents."""
 
-import json
 from typing import Any
-from reconai import ReconConfig, ReconMonitor, TrustGuard, GhostLog
+
+from reconai import GhostLog, ReconConfig, TrustGuard
+
 
 def test_recon_sdk_integration():
     print("=" * 60)
@@ -56,8 +57,10 @@ def test_recon_sdk_integration():
     print("\n[Case 1: Informational Query (Should ALLOW / Pass through)]")
     ghostlog_1 = GhostLog()
     agent_allow = MockClinicalAgent(mode="allow")
-    guarded_allow = TrustGuard(agent_allow, config, ghostlog=ghostlog_1, **policy_kwargs)
-    
+    guarded_allow = TrustGuard(
+        agent_allow, config, ghostlog=ghostlog_1, **policy_kwargs
+    )
+
     result_1 = guarded_allow.invoke({"input": "Summarize documented diabetes history"})
     print("Result 1 Output:", result_1)
     assert result_1 is not None, "Case 1 should pass through"
@@ -70,10 +73,16 @@ def test_recon_sdk_integration():
     print("\n[Case 2: Medication Change (Should Trigger Requires Approval / HITL)]")
     ghostlog_2 = GhostLog()
     agent_escalate = MockClinicalAgent(mode="escalate")
-    guarded_escalate = TrustGuard(agent_escalate, config, ghostlog=ghostlog_2, **policy_kwargs)
-    
-    result_2 = guarded_escalate.invoke({"input": "What should I do about my blood sugar medications?"})
-    print("Result 2 Output (Halted):", result_2)  # Should be None because approval is required
+    guarded_escalate = TrustGuard(
+        agent_escalate, config, ghostlog=ghostlog_2, **policy_kwargs
+    )
+
+    result_2 = guarded_escalate.invoke(
+        {"input": "What should I do about my blood sugar medications?"}
+    )
+    print(
+        "Result 2 Output (Halted):", result_2
+    )  # Should be None because approval is required
     assert result_2 is None, "Case 2 should halt for human approval"
     events_2 = [e.kind for e in ghostlog_2.events()]
     print("GhostLog Events 2:", events_2)
@@ -85,9 +94,13 @@ def test_recon_sdk_integration():
     print("\n[Case 3: Emergency Case (Should Trigger Policy Block)]")
     ghostlog_3 = GhostLog()
     agent_emergency = MockClinicalAgent(mode="emergency")
-    guarded_emergency = TrustGuard(agent_emergency, config, ghostlog=ghostlog_3, **policy_kwargs)
-    
-    result_3 = guarded_emergency.invoke({"input": "Patient is having severe chest pain right now"})
+    guarded_emergency = TrustGuard(
+        agent_emergency, config, ghostlog=ghostlog_3, **policy_kwargs
+    )
+
+    result_3 = guarded_emergency.invoke(
+        {"input": "Patient is having severe chest pain right now"}
+    )
     print("Result 3 Output (Blocked):", result_3)  # Should be None because blocked
     assert result_3 is None, "Case 3 should be blocked by policy"
     events_3 = [e.kind for e in ghostlog_3.events()]
@@ -97,6 +110,7 @@ def test_recon_sdk_integration():
     print("\n" + "=" * 60)
     print("ALL RECON SDK INTEGRATION TESTS PASSED SUCCESSFULLY!")
     print("=" * 60)
+
 
 if __name__ == "__main__":
     test_recon_sdk_integration()

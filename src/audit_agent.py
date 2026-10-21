@@ -13,10 +13,9 @@ import os
 import tempfile
 import uuid
 from collections.abc import Mapping
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-
 
 LOGGER = logging.getLogger(__name__)
 
@@ -62,6 +61,14 @@ class AuditValidationError(ValueError):
     """Raised when agent input or an audit record is structurally invalid."""
 
 
+class ProhibitedTransitionError(AuditValidationError):
+    """Raised when an illegal state transition is attempted on an immutable safety record."""
+
+
+class UnresolvedEvidenceError(AuditValidationError):
+    """Raised when clinical approval is attempted on a record with an unresolved evidence deficit."""
+
+
 class AuditStorageError(RuntimeError):
     """Raised when an audit record cannot be saved or loaded safely."""
 
@@ -103,9 +110,7 @@ def generate_audit_record(
     boundary = _validate_boundary_output(boundary_output)
 
     record_id = _validate_audit_id(audit_id) if audit_id else _new_audit_id()
-    record_timestamp = (
-        _validate_timestamp(timestamp) if timestamp else _utc_timestamp()
-    )
+    record_timestamp = _validate_timestamp(timestamp) if timestamp else _utc_timestamp()
     trace = build_reasoning_trace(
         scenario,
         patient,
@@ -162,12 +167,23 @@ def apply_human_review(
     """
 
     record = load_audit_record(audit_id, audit_directory)
+    record_decision = str(record.get("decision", "")).strip().upper()
+    if record_decision == "STOP":
+        raise ProhibitedTransitionError(
+            "Prohibited state transition: STOP records represent hard safety boundaries and cannot receive human review or approval transitions."
+        )
+
     clean_name = _non_empty_string(reviewer_name, "reviewer_name")
     clean_role = _non_empty_string(reviewer_role, "reviewer_role")
     decision_upper = review_decision.strip().upper()
     if decision_upper not in VALID_REVIEW_DECISIONS:
         raise AuditValidationError(
             f"review_decision must be one of {', '.join(sorted(VALID_REVIEW_DECISIONS))}"
+        )
+
+    if record_decision == "HOLD" and decision_upper == "APPROVED":
+        raise UnresolvedEvidenceError(
+            "Cannot approve an audit in HOLD state: unresolved evidence deficit."
         )
 
     timestamp = _utc_timestamp()
@@ -177,20 +193,29 @@ def apply_human_review(
         "decision": decision_upper,
         "notes": review_notes.strip() if review_notes else "",
         "timestamp": timestamp,
+        "carriesExecutionAuthority": False,
+        "executionAuthorityTransferredToAI": False,
     }
+    if clean_name or clean_role:
+        review_data["approvalAuthorityHolder"] = f"{clean_name} ({clean_role})"
+
     record["human_review"] = review_data
 
     # Append human review milestone to Recon GhostLog timeline
     ghostlog = list(record.get("recon_ghostlog", []))
-    ghostlog.append({
-        "step": len(ghostlog) + 1,
-        "kind": "human_review_signoff",
-        "data": {
-            "decision": decision_upper,
-            "preview": f"Signed-off by {clean_name} ({clean_role}): {decision_upper}",
-            "notes": review_notes.strip() if review_notes else "",
-        },
-    })
+    ghostlog.append(
+        {
+            "step": len(ghostlog) + 1,
+            "kind": "human_review_signoff",
+            "data": {
+                "decision": decision_upper,
+                "preview": f"Signed-off by {clean_name} ({clean_role}): {decision_upper}",
+                "notes": review_notes.strip() if review_notes else "",
+                "carriesExecutionAuthority": False,
+                "executionAuthorityTransferredToAI": False,
+            },
+        }
+    )
     record["recon_ghostlog"] = ghostlog
 
     # Append human review milestone to reasoning trace
@@ -199,7 +224,12 @@ def apply_human_review(
     record["reasoning_trace"] = traces
 
     save_audit_record(record, audit_directory, overwrite=True)
-    LOGGER.info("Human review %s applied to audit %s by %s", decision_upper, audit_id, clean_name)
+    LOGGER.info(
+        "Human review %s applied to audit %s by %s",
+        decision_upper,
+        audit_id,
+        clean_name,
+    )
     return record
 
 
@@ -370,9 +400,7 @@ def _validate_clinical_output(output: Mapping[str, Any]) -> dict[str, Any]:
 
     score = result["confidence_score"]
     if isinstance(score, bool) or not isinstance(score, (int, float)):
-        raise AuditValidationError(
-            "clinical_output.confidence_score must be a number"
-        )
+        raise AuditValidationError("clinical_output.confidence_score must be a number")
     if not 0.0 <= float(score) <= 1.0:
         raise AuditValidationError(
             "clinical_output.confidence_score must be between 0.0 and 1.0"
@@ -442,9 +470,7 @@ def _validate_audit_record(record: Any) -> None:
     _validate_clinical_output(record["clinical_output"])
     _validate_boundary_output(record["boundary_output"])
     if record["version"] != AUDIT_VERSION:
-        raise AuditValidationError(
-            f"audit_record.version must be {AUDIT_VERSION}"
-        )
+        raise AuditValidationError(f"audit_record.version must be {AUDIT_VERSION}")
 
 
 def _non_empty_string(value: Any, field: str) -> str:
@@ -477,7 +503,9 @@ def _validate_audit_id(value: Any) -> str:
     audit_id = _non_empty_string(value, "audit_id")
     if not audit_id.startswith("audit_"):
         raise AuditValidationError("audit_id must start with 'audit_'")
-    if not all(character.isalnum() or character in {"_", "-"} for character in audit_id):
+    if not all(
+        character.isalnum() or character in {"_", "-"} for character in audit_id
+    ):
         raise AuditValidationError("audit_id contains invalid characters")
     return audit_id
 
@@ -485,7 +513,7 @@ def _validate_audit_id(value: Any) -> str:
 def _utc_timestamp() -> str:
     """Return the current UTC timestamp in ISO-8601 form."""
 
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
 def _validate_timestamp(value: Any) -> str:
@@ -493,12 +521,12 @@ def _validate_timestamp(value: Any) -> str:
 
     timestamp = _non_empty_string(value, "timestamp")
     try:
-        parsed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(timestamp)
     except ValueError as exc:
         raise AuditValidationError("timestamp must be ISO-8601") from exc
     if parsed.tzinfo is None:
         raise AuditValidationError("timestamp must include a timezone")
-    return parsed.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+    return parsed.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
 
 def _ensure_json_serializable(value: Any) -> None:

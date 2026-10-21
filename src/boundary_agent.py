@@ -314,9 +314,7 @@ def _validate_clinical_output(
     if isinstance(score, bool) or not isinstance(score, (int, float)):
         raise BoundaryInputError("Field 'confidence_score' must be a number")
     if not 0.0 <= float(score) <= 1.0:
-        raise BoundaryInputError(
-            "Field 'confidence_score' must be between 0.0 and 1.0"
-        )
+        raise BoundaryInputError("Field 'confidence_score' must be between 0.0 and 1.0")
     packet["confidence_score"] = float(score)
 
     if not isinstance(packet["authority_required"], bool):

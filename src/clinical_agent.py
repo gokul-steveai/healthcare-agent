@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from collections.abc import Mapping
 from typing import Any
 
@@ -365,7 +366,9 @@ def _summarize_medications(value: Any) -> list[dict[str, Any]]:
     summaries: list[dict[str, Any]] = []
     for description, records in groups.items():
         ordered = sorted(records, key=lambda item: str(item.get("start_date") or ""))
-        stop_dates = [item.get("stop_date") for item in records if item.get("stop_date")]
+        stop_dates = [
+            item.get("stop_date") for item in records if item.get("stop_date")
+        ]
         summaries.append(
             {
                 "description": description,
@@ -411,9 +414,7 @@ def _summarize_observations(value: Any) -> list[dict[str, Any]]:
 def _summarize_encounters(value: Any) -> dict[str, Any]:
     """Summarize encounter frequency, temporal coverage, and recent events."""
 
-    records = sorted(
-        _mapping_list(value), key=lambda item: str(item.get("date") or "")
-    )
+    records = sorted(_mapping_list(value), key=lambda item: str(item.get("date") or ""))
     by_type: dict[str, dict[str, Any]] = {}
     for item in records:
         encounter_type = str(item.get("type") or "Unknown encounter")
@@ -460,7 +461,7 @@ def _as_number(value: Any) -> float | None:
         number = float(value)
     except (TypeError, ValueError):
         return None
-    return number if number == number and abs(number) != float("inf") else None
+    return number if math.isfinite(number) else None
 
 
 def _is_quota_error(error: Exception) -> bool:

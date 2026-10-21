@@ -15,7 +15,6 @@ from src.api.main import create_app
 from src.api.services import PlatformService
 from src.clinical_agent import ClinicalQuotaError
 
-
 PATIENT_ID = "patient-1"
 CLINICAL_OUTPUT = {
     "analysis": "The request asks for a dated historical summary.",
@@ -38,9 +37,9 @@ BOUNDARY_OUTPUT = {
 
 def _write_csvs(directory: Path) -> None:
     directory.mkdir(parents=True)
-    pd.DataFrame(
-        [{"Id": PATIENT_ID, "GENDER": "F", "BIRTHDATE": "1980-01-01"}]
-    ).to_csv(directory / "patients.csv", index=False)
+    pd.DataFrame([{"Id": PATIENT_ID, "GENDER": "F", "BIRTHDATE": "1980-01-01"}]).to_csv(
+        directory / "patients.csv", index=False
+    )
     pd.DataFrame(
         [
             {
@@ -50,12 +49,12 @@ def _write_csvs(directory: Path) -> None:
             }
         ]
     ).to_csv(directory / "conditions.csv", index=False)
-    pd.DataFrame(
-        columns=["PATIENT", "DESCRIPTION", "START", "STOP"]
-    ).to_csv(directory / "medications.csv", index=False)
-    pd.DataFrame(
-        columns=["PATIENT", "DATE", "DESCRIPTION", "VALUE", "UNITS"]
-    ).to_csv(directory / "observations.csv", index=False)
+    pd.DataFrame(columns=["PATIENT", "DESCRIPTION", "START", "STOP"]).to_csv(
+        directory / "medications.csv", index=False
+    )
+    pd.DataFrame(columns=["PATIENT", "DATE", "DESCRIPTION", "VALUE", "UNITS"]).to_csv(
+        directory / "observations.csv", index=False
+    )
     pd.DataFrame(
         [
             {
@@ -294,7 +293,10 @@ def test_review_audit_records_decision_and_updates_audit(
 ) -> None:
     """Human review endpoint should record clinician decision and update the audit record."""
 
-    client, _ = api_client
+    client, service = api_client
+    service.boundary_client.models.generate_content.return_value = SimpleNamespace(
+        parsed={**BOUNDARY_OUTPUT, "boundary_decision": "ESCALATE"}
+    )
     run = client.post("/run-scenario", json={"scenario_id": "escalate"}).json()
     audit_id = run["audit_id"]
 
@@ -310,10 +312,86 @@ def test_review_audit_records_decision_and_updates_audit(
 
     assert review_res.status_code == 200
     updated_audit = review_res.json()
+    assert updated_audit["decision"] == "ESCALATE"
     assert updated_audit["human_review"]["decision"] == "APPROVED"
     assert updated_audit["human_review"]["reviewer_name"] == "Dr. Sarah Connor"
     assert updated_audit["human_review"]["reviewer_role"] == "Attending Cardiologist"
+    assert updated_audit["human_review"]["carriesExecutionAuthority"] is False
+    assert updated_audit["human_review"]["executionAuthorityTransferredToAI"] is False
+    assert (
+        updated_audit["human_review"]["approvalAuthorityHolder"]
+        == "Dr. Sarah Connor (Attending Cardiologist)"
+    )
+    assert "executionAuthorityHolder" not in updated_audit["human_review"]
 
     get_res = client.get(f"/audit/{audit_id}")
     assert get_res.status_code == 200
     assert get_res.json()["human_review"]["decision"] == "APPROVED"
+    assert get_res.json()["decision"] == "ESCALATE"
+
+
+def test_review_audit_rejects_approval_on_hold_with_422(
+    api_client: tuple[TestClient, PlatformService],
+) -> None:
+    """Invariant 2: Direct API approval on an unresolved HOLD record returns 422 Unprocessable Entity."""
+
+    client, service = api_client
+    service.boundary_client.models.generate_content.return_value = SimpleNamespace(
+        parsed={**BOUNDARY_OUTPUT, "boundary_decision": "HOLD"}
+    )
+    run = client.post("/run-scenario", json={"scenario_id": "hold"}).json()
+    audit_id = run["audit_id"]
+
+    review_res = client.post(
+        f"/audit/{audit_id}/review",
+        json={
+            "reviewer_name": "Dr. Sarah Connor",
+            "reviewer_role": "Attending Cardiologist",
+            "decision": "APPROVED",
+            "notes": "Attempting premature approval without resolving labs.",
+        },
+    )
+
+    assert review_res.status_code == 422
+    body = review_res.json()
+    assert body["error"]["code"] == "unresolved_evidence_error"
+    assert "unresolved evidence deficit" in body["error"]["message"].lower()
+
+    # Verify audit record on disk remains unapproved
+    get_res = client.get(f"/audit/{audit_id}")
+    assert get_res.status_code == 200
+    assert "human_review" not in get_res.json()
+
+
+def test_review_audit_rejects_transition_on_stop_with_403(
+    api_client: tuple[TestClient, PlatformService],
+) -> None:
+    """Invariant 3: Direct API review/approval on a STOP record returns 403 Forbidden."""
+
+    client, service = api_client
+    service.boundary_client.models.generate_content.return_value = SimpleNamespace(
+        parsed={**BOUNDARY_OUTPUT, "boundary_decision": "STOP"}
+    )
+    run = client.post("/run-scenario", json={"scenario_id": "stop"}).json()
+    audit_id = run["audit_id"]
+
+    review_res = client.post(
+        f"/audit/{audit_id}/review",
+        json={
+            "reviewer_name": "Dr. Sarah Connor",
+            "reviewer_role": "Attending Cardiologist",
+            "decision": "APPROVED",
+            "notes": "Attempting unauthorized override of emergency stop.",
+        },
+    )
+
+    assert review_res.status_code == 403
+    body = review_res.json()
+    assert body["error"]["code"] == "prohibited_transition_error"
+    assert "prohibited state transition" in body["error"]["message"].lower()
+
+    # Verify disk record remains unmutated
+    get_res = client.get(f"/audit/{audit_id}")
+    assert get_res.status_code == 200
+    assert get_res.json()["decision"] == "STOP"
+    assert "human_review" not in get_res.json()

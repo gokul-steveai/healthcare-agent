@@ -8,7 +8,6 @@ from ..schemas import RunScenarioRequest, RunScenarioResponse, ScenariosResponse
 from ..services import PlatformService
 from .dependencies import get_platform_service
 
-
 router = APIRouter(tags=["scenarios"])
 Service = Annotated[PlatformService, Depends(get_platform_service)]
 

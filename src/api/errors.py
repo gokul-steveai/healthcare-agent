@@ -9,14 +9,22 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from src.audit_agent import AuditStorageError, AuditValidationError
-from src.boundary_agent import BoundaryAgentError, BoundaryInputError, BoundaryQuotaError
+from src.audit_agent import (
+    AuditStorageError,
+    AuditValidationError,
+    ProhibitedTransitionError,
+    UnresolvedEvidenceError,
+)
+from src.boundary_agent import (
+    BoundaryAgentError,
+    BoundaryInputError,
+    BoundaryQuotaError,
+)
 from src.clinical_agent import ClinicalAgentError, ClinicalQuotaError
 from src.context_builder import PatientNotFoundError
 from src.scenario_runner import ScenarioRunnerError, ScenarioValidationError
 
 from .services.platform import PlatformConfigurationError
-
 
 LOGGER = logging.getLogger(__name__)
 
@@ -69,6 +77,18 @@ def register_exception_handlers(app: FastAPI) -> None:
     ) -> JSONResponse:
         return _response(request, 404, "resource_not_found", str(exc))
 
+    @app.exception_handler(ProhibitedTransitionError)
+    async def prohibited_transition_handler(
+        request: Request, exc: ProhibitedTransitionError
+    ) -> JSONResponse:
+        return _response(request, 403, "prohibited_transition_error", str(exc))
+
+    @app.exception_handler(UnresolvedEvidenceError)
+    async def unresolved_evidence_handler(
+        request: Request, exc: UnresolvedEvidenceError
+    ) -> JSONResponse:
+        return _response(request, 422, "unresolved_evidence_error", str(exc))
+
     async def domain_validation_handler(
         request: Request, exc: Exception
     ) -> JSONResponse:
@@ -108,9 +128,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     for exception_type in (ClinicalQuotaError, BoundaryQuotaError):
         app.add_exception_handler(exception_type, quota_failure_handler)
 
-    async def storage_failure_handler(
-        request: Request, exc: Exception
-    ) -> JSONResponse:
+    async def storage_failure_handler(request: Request, exc: Exception) -> JSONResponse:
         LOGGER.exception("Platform storage failed", exc_info=exc)
         return _response(
             request,

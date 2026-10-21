@@ -7,12 +7,12 @@ clinical decisions or invoke AI agents.
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 import pandas as pd
-
 
 LOGGER = logging.getLogger(__name__)
 
@@ -112,9 +112,7 @@ def get_conditions(
 ) -> list[dict[str, str | None]]:
     """Return a patient's conditions sorted by start date."""
 
-    _require_columns(
-        conditions, {"PATIENT", "DESCRIPTION", "START"}, "conditions.csv"
-    )
+    _require_columns(conditions, {"PATIENT", "DESCRIPTION", "START"}, "conditions.csv")
     rows = _patient_rows(conditions, patient_id, "START")
     return [
         {
@@ -178,9 +176,7 @@ def get_encounters(
 ) -> list[dict[str, str | None]]:
     """Return a patient's encounters sorted chronologically."""
 
-    _require_columns(
-        encounters, {"PATIENT", "START", "DESCRIPTION"}, "encounters.csv"
-    )
+    _require_columns(encounters, {"PATIENT", "START", "DESCRIPTION"}, "encounters.csv")
     rows = _patient_rows(encounters, patient_id, "START")
     return [
         {
@@ -239,9 +235,7 @@ def build_patient_context(
     reference_date = _latest_context_date(
         conditions, medications, observations, encounters
     )
-    patient = get_patient(
-        frames["patients"], patient_id, reference_date=reference_date
-    )
+    patient = get_patient(frames["patients"], patient_id, reference_date=reference_date)
 
     context: PatientContext = {
         "patient": patient,
@@ -260,9 +254,7 @@ def build_patient_context(
     return context
 
 
-def _require_columns(
-    frame: pd.DataFrame, required: set[str], source_name: str
-) -> None:
+def _require_columns(frame: pd.DataFrame, required: set[str], source_name: str) -> None:
     """Raise a descriptive error when required source columns are absent."""
 
     missing = required - set(frame.columns)

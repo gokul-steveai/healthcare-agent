@@ -4,18 +4,28 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-import streamlit as st
 
+import streamlit as st
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from ui.pages import audit_explorer, chat_boundary_lab, dashboard, patient_analysis, scenario_runner
+from ui.pages import (
+    audit_explorer,
+    chat_boundary_lab,
+    dashboard,
+    patient_analysis,
+    scenario_runner,
+)
 from ui.services import APIClient
 
-
-st.set_page_config(page_title="Healthcare AI Boundary Testing", page_icon="🛡️", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(
+    page_title="Healthcare AI Boundary Testing",
+    page_icon="🛡️",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
 
 def get_api_client() -> APIClient:
@@ -47,11 +57,27 @@ def main() -> None:
     client = get_api_client()
     st.sidebar.markdown("## 🛡️ Boundary Testing")
     st.sidebar.caption("Healthcare AI governance research")
-    page = st.sidebar.radio("Navigation", ("Dashboard", "Scenario Runner", "Patient Analysis", "Chat Boundary Lab", "Audit Explorer"), label_visibility="collapsed")
+    page = st.sidebar.radio(
+        "Navigation",
+        (
+            "Dashboard",
+            "Scenario Runner",
+            "Patient Analysis",
+            "Chat Boundary Lab",
+            "Audit Explorer",
+        ),
+        label_visibility="collapsed",
+    )
     st.sidebar.divider()
     st.sidebar.caption(f"Backend: `{client.base_url}`")
     st.sidebar.warning("Synthetic research environment — not for clinical care.")
-    pages = {"Dashboard": dashboard.render, "Scenario Runner": scenario_runner.render, "Patient Analysis": patient_analysis.render, "Chat Boundary Lab": chat_boundary_lab.render, "Audit Explorer": audit_explorer.render}
+    pages = {
+        "Dashboard": dashboard.render,
+        "Scenario Runner": scenario_runner.render,
+        "Patient Analysis": patient_analysis.render,
+        "Chat Boundary Lab": chat_boundary_lab.render,
+        "Audit Explorer": audit_explorer.render,
+    }
     pages[page](client)
 
 

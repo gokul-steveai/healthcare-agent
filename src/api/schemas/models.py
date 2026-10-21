@@ -6,7 +6,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 BoundaryDecision = Literal["ALLOW", "HOLD", "ESCALATE", "STOP"]
 
 

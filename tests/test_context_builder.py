@@ -8,17 +8,15 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from context_builder import (  # noqa: E402
+from context_builder import (
     PatientNotFoundError,
     build_patient_context,
     get_medications,
     get_observations,
     load_data,
 )
-
 
 PATIENT_ID = "patient-1"
 

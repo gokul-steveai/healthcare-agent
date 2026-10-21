@@ -1,11 +1,11 @@
 """FastAPI application factory and ASGI entrypoint."""
 
 from __future__ import annotations
-from typing import Any
 
 import logging
 import time
 import uuid
+from typing import Any
 
 from fastapi import FastAPI, Request, Response
 
@@ -13,7 +13,6 @@ from .errors import register_exception_handlers
 from .logging import configure_logging
 from .routes import analysis_router, audits_router, health_router, scenarios_router
 from .services import PlatformService
-
 
 LOGGER = logging.getLogger(__name__)
 
@@ -35,9 +34,7 @@ def create_app(service: PlatformService | None = None) -> FastAPI:
     application.state.platform_service = service or PlatformService.from_environment()
 
     @application.middleware("http")
-    async def request_logging_middleware(
-        request: Request, call_next: Any
-    ) -> Response:
+    async def request_logging_middleware(request: Request, call_next: Any) -> Response:
         request_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex
         request.state.request_id = request_id
         started = time.perf_counter()

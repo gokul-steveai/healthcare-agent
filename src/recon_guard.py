@@ -22,6 +22,7 @@ LOGGER = logging.getLogger(__name__)
 
 try:
     from reconai import GhostLog, ReconConfig, TrustGuard
+
     HAS_RECON = True
 except ImportError:
     HAS_RECON = False
@@ -50,7 +51,7 @@ DEFAULT_BLOCKED_MARKERS = (
 
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 @dataclass(frozen=True)
@@ -68,6 +69,7 @@ def generate_recon_receipt(
     scenario_id: str,
     boundary_decision: str,
     correlation_id: str | None = None,
+    reason: str | None = None,
 ) -> dict[str, Any]:
     """Generate a structured Recon.AI Trust Receipt matching production schema."""
 
@@ -75,26 +77,47 @@ def generate_recon_receipt(
     receipt_id = f"receipt_{uuid.uuid4().hex}"
     ledger_id = f"ledger_{uuid.uuid4().hex}"
 
-    if boundary_decision == "ALLOW":
-        decision = "permit"
-    elif boundary_decision in ("HOLD", "ESCALATE"):
-        decision = "requires_approval"
+    bd_upper = str(boundary_decision).strip().upper() if boundary_decision else "ALLOW"
+    if bd_upper in ("ALLOW", "PROCEED"):
+        governance_state = "PROCEED"
+        state_reason = reason or "informational_within_bounds"
+        decision = "PROCEED"
+    elif bd_upper == "HOLD":
+        governance_state = "HOLD"
+        state_reason = reason or "evidence_deficit"
+        decision = "HOLD"
+    elif bd_upper == "ESCALATE":
+        governance_state = "ESCALATE"
+        state_reason = reason or "authority_boundary"
+        decision = "ESCALATE"
+    elif bd_upper == "STOP":
+        governance_state = "STOP"
+        state_reason = reason or "safety_prohibition"
+        decision = "STOP"
     else:
-        decision = "blocked"
+        governance_state = bd_upper
+        state_reason = reason or "custom_governance_decision"
+        decision = bd_upper
 
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now_iso = datetime.now(UTC).isoformat()
     is_dry_run = os.getenv("RECON_DRY_RUN", "true").lower() == "true"
 
     return {
         "correlation_id": cid,
         "receipt_id": receipt_id,
         "ledger_entry_id": ledger_id,
+        "governance_state": governance_state,
+        "reason": state_reason,
         "decision": decision,
         "policy_id": f"policy_healthcare_{scenario_id}",
         "issued_at": now_iso,
         "receipt_url": f"https://reconai.net/trust-receipts/{cid}",
         "ledger_url": f"https://reconai.net/ghostlog?highlight={cid}",
         "governance_mode": "dry_run" if is_dry_run else "live",
+        "authority_attribution": {
+            "carriesExecutionAuthority": False,
+            "executionAuthorityTransferredToAI": False,
+        },
     }
 
 
@@ -145,12 +168,12 @@ def guarded_analyze_patient(
         GuardedClinicalResult containing validated clinical_output and ghostlog_timeline.
     """
 
-    recon_enabled = (
-        os.getenv("RECON_ENABLED", "true").lower() == "true" and HAS_RECON
-    )
+    recon_enabled = os.getenv("RECON_ENABLED", "true").lower() == "true" and HAS_RECON
 
     if not recon_enabled:
-        LOGGER.debug("Recon guard disabled or unavailable; running native clinical analysis")
+        LOGGER.debug(
+            "Recon guard disabled or unavailable; running native clinical analysis"
+        )
         clinical_output = analyze_patient(
             patient_context, user_request, **analyze_kwargs
         )
@@ -217,7 +240,9 @@ def guarded_analyze_patient(
     except ClinicalAgentError:
         raise
     except Exception:
-        LOGGER.exception("Recon TrustGuard encountered error; falling back to native clinical analysis")
+        LOGGER.exception(
+            "Recon TrustGuard encountered error; falling back to native clinical analysis"
+        )
         if adapter.captured_clinical_output is not None:
             clinical_output = adapter.captured_clinical_output
         else:

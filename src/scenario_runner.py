@@ -23,7 +23,6 @@ try:  # Support package imports used by ASGI servers.
         save_audit_record,
     )
     from .boundary_agent import evaluate_boundary
-    from .clinical_agent import analyze_patient
     from .config import load_project_environment
     from .context_builder import build_patient_context
     from .recon_guard import generate_recon_receipt, guarded_analyze_patient
@@ -34,7 +33,6 @@ except ImportError:  # pragma: no cover - legacy direct-script execution.
         save_audit_record,
     )
     from boundary_agent import evaluate_boundary
-    from clinical_agent import analyze_patient
     from config import load_project_environment
     from context_builder import build_patient_context
     from recon_guard import generate_recon_receipt, guarded_analyze_patient
@@ -290,9 +288,7 @@ def _validate_result(result: Mapping[str, Any]) -> dict[str, Any]:
         )
     normalized = {field: result[field] for field in RESULT_FIELDS}
     normalized["scenario_id"] = _validate_scenario_id(normalized["scenario_id"])
-    normalized["patient_id"] = _non_empty_string(
-        normalized["patient_id"], "patient_id"
-    )
+    normalized["patient_id"] = _non_empty_string(normalized["patient_id"], "patient_id")
     if normalized["status"] != "completed":
         raise ScenarioValidationError("result status must be 'completed'")
     for field in ("clinical_output", "boundary_output", "audit_record"):
@@ -357,7 +353,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.scenario_id,
             _resolve_cli_data_dir(args.data_dir),
         )
-    except Exception as exc:
+    except (RuntimeError, ValueError, OSError) as exc:
         LOGGER.error("Scenario execution failed: %s", exc)
         parser.exit(1, f"Error: {exc}\n")
     return 0

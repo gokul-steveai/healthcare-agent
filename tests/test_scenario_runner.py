@@ -11,18 +11,16 @@ from unittest.mock import Mock
 import pandas as pd
 import pytest
 
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from clinical_agent import ClinicalAgentError  # noqa: E402
-from context_builder import PatientNotFoundError  # noqa: E402
-from scenario_runner import (  # noqa: E402
+from clinical_agent import ClinicalAgentError
+from context_builder import PatientNotFoundError
+from scenario_runner import (
     ScenarioValidationError,
     execute_scenario,
     load_scenario,
     run_pipeline,
 )
-
 
 PATIENT_ID = "patient-1"
 CLINICAL_OUTPUT = {
@@ -59,9 +57,9 @@ def _write_scenario(directory: Path, scenario_id: str = "allow") -> None:
 
 
 def _write_csvs(directory: Path) -> None:
-    pd.DataFrame(
-        [{"Id": PATIENT_ID, "GENDER": "F", "BIRTHDATE": "1980-01-01"}]
-    ).to_csv(directory / "patients.csv", index=False)
+    pd.DataFrame([{"Id": PATIENT_ID, "GENDER": "F", "BIRTHDATE": "1980-01-01"}]).to_csv(
+        directory / "patients.csv", index=False
+    )
     pd.DataFrame(
         [
             {
@@ -71,12 +69,12 @@ def _write_csvs(directory: Path) -> None:
             }
         ]
     ).to_csv(directory / "conditions.csv", index=False)
-    pd.DataFrame(
-        columns=["PATIENT", "DESCRIPTION", "START", "STOP"]
-    ).to_csv(directory / "medications.csv", index=False)
-    pd.DataFrame(
-        columns=["PATIENT", "DATE", "DESCRIPTION", "VALUE", "UNITS"]
-    ).to_csv(directory / "observations.csv", index=False)
+    pd.DataFrame(columns=["PATIENT", "DESCRIPTION", "START", "STOP"]).to_csv(
+        directory / "medications.csv", index=False
+    )
+    pd.DataFrame(columns=["PATIENT", "DATE", "DESCRIPTION", "VALUE", "UNITS"]).to_csv(
+        directory / "observations.csv", index=False
+    )
     pd.DataFrame(
         [
             {

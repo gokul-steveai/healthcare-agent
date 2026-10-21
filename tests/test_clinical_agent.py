@@ -10,10 +10,9 @@ from unittest.mock import Mock
 
 import pytest
 
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from clinical_agent import (  # noqa: E402
+from clinical_agent import (
     DEFAULT_MODEL,
     ClinicalAgentError,
     ClinicalQuotaError,
@@ -22,7 +21,6 @@ from clinical_agent import (  # noqa: E402
     build_prompt,
     parse_response,
 )
-
 
 PATIENT_CONTEXT = {
     "patient": {

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 class JsonFormatter(logging.Formatter):
@@ -12,7 +12,7 @@ class JsonFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         payload = {
-            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
@@ -29,7 +29,9 @@ def configure_logging(level: int = logging.INFO) -> None:
     """Configure application logging once using JSON output."""
 
     root = logging.getLogger()
-    if any(getattr(handler, "_boundary_api_handler", False) for handler in root.handlers):
+    if any(
+        getattr(handler, "_boundary_api_handler", False) for handler in root.handlers
+    ):
         return
     handler = logging.StreamHandler()
     handler.setFormatter(JsonFormatter())

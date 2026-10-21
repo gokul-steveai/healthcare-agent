@@ -11,7 +11,6 @@ from urllib.parse import quote
 import httpx
 from dotenv import dotenv_values
 
-
 DEFAULT_API_BASE_URL = "http://localhost:8000"
 
 
@@ -75,14 +74,19 @@ class APIClient:
 
     def analyze(self, patient_id: str, user_request: str) -> dict[str, Any]:
         return self._request(
-            "POST", "/analyze", json={"patient_id": patient_id, "user_request": user_request}
+            "POST",
+            "/analyze",
+            json={"patient_id": patient_id, "user_request": user_request},
         )
 
     def audits(self) -> list[dict[str, Any]]:
         return _require_list(self._request("GET", "/audits"), "audits")
 
     def audit(self, audit_id: str) -> dict[str, Any]:
-        encoded = quote(audit_id, safe="_-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+        encoded = quote(
+            audit_id,
+            safe="_-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+        )
         return self._request("GET", f"/audit/{encoded}")
 
     def review_audit(
@@ -93,7 +97,10 @@ class APIClient:
         decision: str,
         notes: str = "",
     ) -> dict[str, Any]:
-        encoded = quote(audit_id, safe="_-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+        encoded = quote(
+            audit_id,
+            safe="_-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+        )
         return self._request(
             "POST",
             f"/audit/{encoded}/review",
@@ -111,7 +118,9 @@ class APIClient:
         try:
             response = self._client.request(method, path, json=json)
         except httpx.TimeoutException as exc:
-            raise APITimeoutError("The backend took too long to respond. Please try again.") from exc
+            raise APITimeoutError(
+                "The backend took too long to respond. Please try again."
+            ) from exc
         except httpx.RequestError as exc:
             raise APIUnavailableError(
                 "The FastAPI backend is unavailable. Confirm it is running and API_BASE_URL is correct."
@@ -124,9 +133,14 @@ class APIClient:
         try:
             payload = response.json()
         except ValueError as exc:
-            raise APIResponseError("The backend returned invalid JSON.", status_code=response.status_code) from exc
+            raise APIResponseError(
+                "The backend returned invalid JSON.", status_code=response.status_code
+            ) from exc
         if not isinstance(payload, dict):
-            raise APIResponseError("The backend returned an unexpected response shape.", status_code=response.status_code)
+            raise APIResponseError(
+                "The backend returned an unexpected response shape.",
+                status_code=response.status_code,
+            )
         return payload
 
 
@@ -158,5 +172,8 @@ def _configured_base_url() -> str:
 def _require_list(payload: Mapping[str, Any], field: str) -> list[dict[str, Any]]:
     value = payload.get(field)
     if not isinstance(value, list) or any(not isinstance(item, dict) for item in value):
-        raise APIResponseError(f"The backend response did not contain a valid '{field}' list.", status_code=200)
+        raise APIResponseError(
+            f"The backend response did not contain a valid '{field}' list.",
+            status_code=200,
+        )
     return value

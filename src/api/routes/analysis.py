@@ -8,7 +8,6 @@ from ..schemas import AnalyzeRequest, AnalyzeResponse
 from ..services import PlatformService
 from .dependencies import get_platform_service
 
-
 router = APIRouter(tags=["analysis"])
 Service = Annotated[PlatformService, Depends(get_platform_service)]
 

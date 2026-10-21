@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import uuid
@@ -16,12 +15,10 @@ from src.audit_agent import (
     save_audit_record,
 )
 from src.boundary_agent import evaluate_boundary
-from src.clinical_agent import analyze_patient
 from src.config import PROJECT_ROOT, load_project_environment
 from src.context_builder import build_patient_context
 from src.recon_guard import generate_recon_receipt, guarded_analyze_patient
 from src.scenario_runner import execute_scenario, load_scenario
-
 
 LOGGER = logging.getLogger(__name__)
 
@@ -51,7 +48,7 @@ class PlatformService:
         self.boundary_client = boundary_client
 
     @classmethod
-    def from_environment(cls) -> "PlatformService":
+    def from_environment(cls) -> PlatformService:
         """Create a service using project `.env` settings."""
 
         load_project_environment()
@@ -177,7 +174,5 @@ class PlatformService:
         """Return configured CSV path or raise a stable configuration error."""
 
         if self.data_dir is None:
-            raise PlatformConfigurationError(
-                "SYNTHEA_DATA_DIR is not configured"
-            )
+            raise PlatformConfigurationError("SYNTHEA_DATA_DIR is not configured")
         return self.data_dir

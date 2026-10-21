@@ -9,8 +9,7 @@ import streamlit as st
 
 from ui.components import render_decision_badge
 from ui.pages.common import json_download, show_api_error
-from ui.services import APIClient
-
+from ui.services import APIClient, APIClientError
 
 DEFAULT_PATIENT_ID = "2c71dd97-7085-416a-aa07-d675bbe3adf2"
 HISTORY_KEY = "chat_boundary_history"
@@ -57,7 +56,9 @@ def render(client: APIClient) -> None:
         st.markdown(message)
 
     try:
-        with st.status("Running Clinical Agent → Boundary Agent → Audit…", expanded=True) as status:
+        with st.status(
+            "Running Clinical Agent → Boundary Agent → Audit…", expanded=True
+        ) as status:
             status.write("Clinical Agent is analyzing the patient context")
             result = client.analyze(patient_id.strip(), message.strip())
             status.write("Boundary Agent is evaluating evidence, authority, and safety")
@@ -76,7 +77,7 @@ def render(client: APIClient) -> None:
             st.session_state[HISTORY_KEY] = history
             status.update(label="Interaction completed and audited", state="complete")
         _render_interaction(interaction, index=len(history) - 1, show_user=False)
-    except Exception as error:
+    except APIClientError as error:
         show_api_error(error)
 
 
@@ -101,7 +102,9 @@ def _render_interaction(
             st.markdown(message)
 
     with st.chat_message("assistant"):
-        decision = str(boundary.get("boundary_decision", audit.get("decision", "UNKNOWN")))
+        decision = str(
+            boundary.get("boundary_decision", audit.get("decision", "UNKNOWN"))
+        )
         recommendation = str(
             clinical.get("recommendation")
             or clinical.get("analysis")
@@ -114,11 +117,15 @@ def _render_interaction(
         if audit.get("recon_receipt"):
             rr = audit["recon_receipt"]
             status_text = rr.get("status", "VALID")
-            st.caption(f"🛡️ **Recon Trust Receipt**: `{rr.get('receipt_id')}` · Status: **{status_text}**")
+            st.caption(
+                f"🛡️ **Recon Trust Receipt**: `{rr.get('receipt_id')}` · Status: **{status_text}**"
+            )
 
         if audit.get("human_review"):
             hr = audit["human_review"]
-            st.success(f"👨‍⚕️ Clinician Decision: **{hr.get('decision')}** by {hr.get('reviewer_name')} ({hr.get('reviewer_role')})")
+            st.success(
+                f"👨‍⚕️ Clinician Decision: **{hr.get('decision')}** by {hr.get('reviewer_name')} ({hr.get('reviewer_role')})"
+            )
 
         score = clinical.get("confidence_score")
         metrics = st.columns(3)
@@ -150,10 +157,14 @@ def _render_interaction(
             st.write(boundary.get("boundary_reasoning", "Not available"))
 
         if audit.get("recon_ghostlog"):
-            with st.expander("🛡️ Recon.AI Execution Timeline (GhostLog)", expanded=False):
+            with st.expander(
+                "🛡️ Recon.AI Execution Timeline (GhostLog)", expanded=False
+            ):
                 st.caption("In-process governance trace recorded by Recon TrustGuard")
                 for entry in audit["recon_ghostlog"]:
-                    st.markdown(f"- **Step {entry.get('step', '—')}:** `{entry.get('kind', 'event')}`")
+                    st.markdown(
+                        f"- **Step {entry.get('step', '—')}:** `{entry.get('kind', 'event')}`"
+                    )
 
         with st.expander("Full reasoning trace", expanded=True):
             trace = audit.get("reasoning_trace", [])

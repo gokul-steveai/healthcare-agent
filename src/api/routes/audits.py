@@ -8,7 +8,6 @@ from ..schemas import AuditsResponse, ReviewAuditRequest
 from ..services import PlatformService
 from .dependencies import get_platform_service
 
-
 router = APIRouter(tags=["audits"])
 Service = Annotated[PlatformService, Depends(get_platform_service)]
 
